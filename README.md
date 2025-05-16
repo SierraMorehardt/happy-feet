@@ -30,11 +30,11 @@ npm install
 cp .env.example .env
 ```
    - Edit `.env` with your specific values:
-   - `PORT`: Application port (default: 8080)
-   - `NODE_ENV`: Environment mode (development/production)
-   - `RATE_LIMIT_*`: Rate limiting configuration
-   - `JWT_SECRET`: JWT signing secret (keep this secure!)
-   - `CORS_ORIGIN`: Allowed CORS origin
+     - `PORT`: Application port (default: 8080)
+     - `NODE_ENV`: Environment mode (development/production)
+     - `RATE_LIMIT_*`: Rate limiting configuration
+     - `JWT_SECRET`: JWT signing secret (keep this secure!)
+     - `CORS_ORIGIN`: Allowed CORS origin
 
 ## Project Structure
 
