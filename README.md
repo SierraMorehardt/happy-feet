@@ -30,15 +30,15 @@ npm install
 cp .env.example .env
 ```
    - Edit `.env` with your specific values:
-     - `PORT`: Application port (default: 8080)
-     - `NODE_ENV`: Environment mode (development/production)
-     - `RATE_LIMIT_*`: Rate limiting configuration
-     - `JWT_SECRET`: JWT signing secret (keep this secure!)
-     - `CORS_ORIGIN`: Allowed CORS origin
+   - `PORT`: Application port (default: 8080)
+   - `NODE_ENV`: Environment mode (development/production)
+   - `RATE_LIMIT_*`: Rate limiting configuration
+   - `JWT_SECRET`: JWT signing secret (keep this secure!)
+   - `CORS_ORIGIN`: Allowed CORS origin
 
 ## Project Structure
 
-```
+```text
 happy-feet/
 ├── src/                 # Source code directory
 │   ├── main/           # Main application code
@@ -120,25 +120,25 @@ POST /api/register
 ```
 
 Request Body:
-```json
+```typescript
 {
   "username": "string",
   "password": "string",
-  "age": number,
+  "age": 0,
   "gender": "M" | "F",
-  "currentWeeklyMileage": number,
-  "longestRecentRun": number
+  "currentWeeklyMileage": 0,
+  "longestRecentRun": 0
 }
 ```
 
 Response:
-```json
+```typescript
 {
   "username": "string",
-  "age": number,
+  "age": 0,
   "gender": "M" | "F",
-  "currentWeeklyMileage": number,
-  "longestRecentRun": number
+  "currentWeeklyMileage": 0,
+  "longestRecentRun": 0
 }
 ```
 
@@ -149,7 +149,7 @@ POST /api/login
 ```
 
 Request Body:
-```json
+```typescript
 {
   "username": "string",
   "password": "string"
@@ -157,11 +157,13 @@ Request Body:
 ```
 
 Response:
-```json
+```typescript
 {
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."  // This is a sample JWT token
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
 }
 ```
+
+Note: The token above is a sample JWT token
 
 The JWT token contains three parts:
 1. Header: Contains the token type and algorithm
@@ -190,13 +192,13 @@ Authorization: Bearer <jwt-token>
 ```
 
 Response:
-```json
+```typescript
 {
   "username": "string",
-  "age": number,
+  "age": 0,
   "gender": "M" | "F",
-  "currentWeeklyMileage": number,
-  "longestRecentRun": number,
+  "currentWeeklyMileage": 0,
+  "longestRecentRun": 0,
   "createdAt": "timestamp",
   "updatedAt": "timestamp"
 }
@@ -206,10 +208,10 @@ Response:
 
 The API returns standardized error responses:
 
-```json
+```typescript
 {
   "error": "error message",
-  "status": number
+  "status": 400
 }
 ```
 
@@ -279,7 +281,7 @@ For support, please:
 - **Method:** POST
 - **URL:** `/api/login`
 - **Request Body:**
-```json
+```typescript
 {
   "username": "testuser",
   "password": "password123"
@@ -296,7 +298,7 @@ For support, please:
 - **Response:**
   - `200 OK` with user details
   - Example:
-    ```json
+    ```typescript
     {
       "username": "testuser",
       "age": 28,
