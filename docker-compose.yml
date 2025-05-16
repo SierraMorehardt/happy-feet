@@ -1,0 +1,31 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:16
+    restart: always
+    environment:
+      POSTGRES_USER: sierra.morehardt
+      POSTGRES_PASSWORD: Test123!
+      POSTGRES_DB: happyfeet
+    ports:
+      - "5432:5432"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    volumes:
+      - ./src:/app/src  # Mount source code for live development
+    depends_on:
+      - db
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/happyfeet
+      SPRING_DATASOURCE_USERNAME: sierra.morehardt
+      SPRING_DATASOURCE_PASSWORD: Test123!
+    ports:
+      - "8080:8080"
+    # Uncomment the following if you want to wait for db to be ready (optional)
+    # entrypoint: ["/bin/sh", "-c", "./wait-for-it.sh db:5432 -- java -jar /app.jar"]
+
+volumes:
+  db_data:

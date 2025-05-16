@@ -1,0 +1,29 @@
+### Register a new user
+POST http://localhost:8080/api/register
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "password": "password123",
+  "age": 28,
+  "gender": "F",
+  "currentWeeklyMileage": 0.0,
+  "longestRecentRun": 13
+}
+
+###
+
+### Login
+POST http://localhost:8080/api/login
+Content-Type: application/json
+
+{
+  "username": "testuser",
+  "password": "password123"
+}
+
+###
+
+### Get user by username
+GET http://localhost:8080/api/users/testuser
+Accept: application/json
