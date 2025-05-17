@@ -1,12 +1,7 @@
-// Import statements
-const { User } = require('./model/User');
-const { TrainingPlan } = require('./model/TrainingPlan');
-const { Workout } = require('./model/Workout');
-const { UserRepository } = require('./repository/UserRepository');
-const { TrainingPlanRepository } = require('./repository/TrainingPlanRepository');
-const { WorkoutRepository } = require('./repository/WorkoutRepository');
+import { User } from './model/User';
+import { TrainingPlan } from './model/TrainingPlan';
+import { Workout } from './model/Workout';
 
-// Define the seedDatabase function
 async function seedDatabase(userRepo, planRepo, workoutRepo, passwordEncoder) {
     if (await userRepo.count() === 0) {
         // Create user
@@ -59,4 +54,4 @@ async function seedDatabase(userRepo, planRepo, workoutRepo, passwordEncoder) {
     }
 }
 
-module.exports = { seedDatabase };
+export default { seedDatabase };

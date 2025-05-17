@@ -1,12 +1,10 @@
-const express = require('express');
-const { UserRegistrationRequest } = require('../dto/UserRegistrationRequest');
-const { LoginRequest } = require('../dto/LoginRequest');
-const { User } = require('../model/User');
-const { UserRepository } = require('../repository/UserRepository');
-const bcrypt = require('bcrypt'); 
-const winston = require('winston'); 
+import { Router } from 'express';
+import { UserRegistrationRequest } from '../dto/UserRegistrationRequest';
+import { LoginRequest } from '../dto/LoginRequest';
+import { User } from '../model/User';
+import { compare } from 'bcrypt'; 
 
-const router = express.Router();
+const router = Router();
 
 class UserController {
     constructor(userRepository) {
@@ -53,7 +51,7 @@ class UserController {
             }
 
             // Verify password
-            const isValidPassword = await bcrypt.compare(request.password, user.getPassword());
+            const isValidPassword = await compare(request.password, user.getPassword());
             if (!isValidPassword) {
                 return res.status(401).json({ message: 'Invalid credentials' });
             }
@@ -78,4 +76,4 @@ class UserController {
 router.post('/register', (req, res) => userController.registerUser(req, res));
 router.post('/login', (req, res) => userController.login(req, res));
 
-module.exports = router;
+export default router;

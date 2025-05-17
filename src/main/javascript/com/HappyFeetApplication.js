@@ -1,9 +1,10 @@
-const express = require('express');
-const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
-const cors = require('cors');
-const rateLimit = require('express-rate-limit');
-const { body, validationResult } = require('express-validator');
+import express, { json, urlencoded } from 'express';
+import { hash, compare } from 'bcrypt';
+import { verify, sign } from 'jsonwebtoken';
+import cors from 'cors';
+import rateLimit from 'express-rate-limit';
+import { body, validationResult } from 'express-validator';
+import { pool, initDb } from './utils/db';
 
 const app = express();
 
@@ -12,9 +13,8 @@ require('dotenv').config();
 const PORT = process.env.PORT || 8080;
 const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
 
-// Initialize in-memory storage
-const registeredEmails = new Set();
-const users = new Map();
+// Initialize database
+initDb().catch(console.error);
 
 // User model structure
 const User = {
@@ -31,8 +31,8 @@ const User = {
 };
 
 // Middleware setup
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(json());
+app.use(urlencoded({ extended: true }));
 app.use(cors());
 app.use(rateLimit({
     windowMs: 15 * 60 * 1000, // 15 minutes
@@ -58,22 +58,41 @@ const registerValidation = [
 
 // Authentication middleware
 async function authenticate(req, res, next) {
-    const authHeader = req.headers.authorization;
-    if (!authHeader) {
-        return res.status(401).json({ error: 'No token provided' });
-    }
-
-    const token = authHeader.split(' ')[1];
-    if (!token) {
-        return res.status(401).json({ error: 'Invalid token format' });
-    }
-
+    const client = await pool.connect();
     try {
-        const decoded = jwt.verify(token, JWT_SECRET);
-        req.user = decoded;
+        const authHeader = req.headers.authorization;
+        if (!authHeader) {
+            return res.status(401).json({ error: 'No token provided' });
+        }
+
+        const token = authHeader.split(' ')[1];
+        if (!token) {
+            return res.status(401).json({ error: 'Invalid token format' });
+        }
+
+        const decoded = verify(token, JWT_SECRET);
+        
+        // Verify user exists in database
+        const userResult = await client.query(
+            'SELECT id, email, role FROM users WHERE id = $1',
+            [decoded.id]
+        );
+
+        if (userResult.rows.length === 0) {
+            return res.status(401).json({ error: 'User not found' });
+        }
+
+        // Attach user to request
+        req.user = userResult.rows[0];
         next();
-    } catch {
-        return res.status(401).json({ error: 'Invalid or expired token' });
+    } catch (error) {
+        console.error('Authentication error:', error);
+        if (error.name === 'JsonWebTokenError' || error.name === 'TokenExpiredError') {
+            return res.status(401).json({ error: 'Invalid or expired token' });
+        }
+        return res.status(500).json({ error: 'Authentication failed' });
+    } finally {
+        client.release();
     }
 }
 
@@ -91,7 +110,7 @@ app.post('/api/register', validate(registerValidation), async (req, res) => {
             return res.status(409).json({ error: 'Email already exists' });
         }
 
-        const hashedPassword = await bcrypt.hash(password, 10);
+        const hashedPassword = await hash(password, 10);
         const user = { 
             name,
             password: hashedPassword,
@@ -102,7 +121,7 @@ app.post('/api/register', validate(registerValidation), async (req, res) => {
         users.set(email, user);
         registeredEmails.add(email);
 
-        const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: '24h' });
+        const token = sign({ email }, JWT_SECRET, { expiresIn: '24h' });
         return res.status(201).json({ 
             message: 'User registered successfully',
             token,
@@ -124,7 +143,7 @@ app.post('/api/login', async (req, res) => {
         const { email, password } = req.body;
         const user = users.get(email);
 
-        if (!user || !(await bcrypt.compare(password, user.password))) {
+        if (!user || !(await compare(password, user.password))) {
             return res.status(401).json({ error: 'Invalid credentials' });
         }
 
@@ -132,7 +151,7 @@ app.post('/api/login', async (req, res) => {
         const updatedUser = { ...user, lastLogin: new Date() };
         users.set(email, updatedUser);
 
-        const token = jwt.sign({ email }, JWT_SECRET, { expiresIn: '24h' });
+        const token = sign({ email }, JWT_SECRET, { expiresIn: '24h' });
         return res.status(200).json({
             message: 'Login successful',
             token,
@@ -213,6 +232,8 @@ app.put('/api/user/profile', authenticate, async (req, res) => {
     }
 });
 
+// Admin routes
+
 // Get user activity history (admin only)
 app.get('/api/user/activity', authenticate, async (req, res) => {
     try {
@@ -241,8 +262,6 @@ app.get('/api/user/activity', authenticate, async (req, res) => {
         return res.status(500).json({ error: 'Failed to get activity history' });
     }
 });
-
-// Admin routes
 
 // Get all users (admin only)
 app.get('/api/admin/users', authenticate, async (req, res) => {
@@ -313,6 +332,102 @@ app.put('/api/admin/users/:email/role', authenticate, async (req, res) => {
     }
 });
 
+// Workout routes
+
+// Log a new workout
+app.post('/api/workouts', authenticate, async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { type, distance, intensity, completed, date } = req.body;
+        
+        // Basic validation
+        if (!type || distance === undefined) {
+            return res.status(400).json({ error: 'Type and distance are required' });
+        }
+
+        await client.query('BEGIN');
+        
+        // Insert workout into database
+        const result = await client.query(
+            `INSERT INTO workouts (user_id, type, distance, intensity, completed, date)
+             VALUES ($1, $2, $3, $4, $5, $6)
+             RETURNING *`,
+            [
+                req.user.id,
+                type,
+                parseFloat(distance),
+                intensity || 'medium',
+                completed || false,
+                date || new Date()
+            ]
+        );
+        
+        await client.query('COMMIT');
+        
+        const workout = result.rows[0];
+        return res.status(201).json({
+            message: 'Workout logged successfully',
+            workout
+        });
+    } catch (error) {
+        await client.query('ROLLBACK');
+        console.error('Failed to log workout:', error);
+        return res.status(500).json({ error: 'Failed to log workout', details: error.message });
+    } finally {
+        client.release();
+    }
+});
+
+// Get all workouts for the authenticated user
+app.get('/api/workouts', authenticate, async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const result = await client.query(
+            `SELECT * FROM workouts 
+             WHERE user_id = $1 
+             ORDER BY date DESC`,
+            [req.user.id]
+        );
+
+        return res.status(200).json({
+            count: result.rowCount,
+            workouts: result.rows
+        });
+    } catch (error) {
+        console.error('Failed to fetch workouts:', error);
+        return res.status(500).json({ error: 'Failed to fetch workouts', details: error.message });
+    } finally {
+        client.release();
+    }
+});
+
+// Get a specific workout by ID
+app.get('/api/workouts/:id', authenticate, async (req, res) => {
+    const client = await pool.connect();
+    try {
+        const { id } = req.params;
+        
+        const result = await client.query(
+            `SELECT * FROM workouts 
+             WHERE id = $1 AND user_id = $2`,
+            [id, req.user.id]
+        );
+
+        if (result.rows.length === 0) {
+            return res.status(404).json({ error: 'Workout not found' });
+        }
+
+        return res.status(200).json({
+            workout: result.rows[0]
+        });
+    } catch (error) {
+        console.error('Failed to fetch workout:', error);
+        return res.status(500).json({ error: 'Failed to fetch workout', details: error.message });
+    } finally {
+        client.release();
+    }
+});
+
 // Root route
 app.get('/', (req, res) => {
     res.status(200).json({
@@ -345,4 +460,4 @@ app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
 });
 
-module.exports = app;
+export default app;

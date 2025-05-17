@@ -1,14 +1,11 @@
-const express = require('express');
-const { TrainingPlanRequest } = require('../dto/TrainingPlanRequest');
-const { TrainingPlan } = require('../model/TrainingPlan');
-const { User } = require('../model/User');
-const { TrainingPlanRepository } = require('../repository/TrainingPlanRepository');
-const { UserRepository } = require('../repository/UserRepository');
-const { WorkoutRepository } = require('../repository/WorkoutRepository');
-const { RaceResultRepository } = require('../repository/RaceResultRepository');
-const { RaceResult } = require('../model/RaceResult');
+import { Router } from 'express';
+import { TrainingPlanRequest } from '../dto/TrainingPlanRequest';
+import { TrainingPlanRepository } from '../repository/TrainingPlanRepository';
+import { UserRepository } from '../repository/UserRepository';
+import { WorkoutRepository } from '../repository/WorkoutRepository';
+import { RaceResultRepository } from '../repository/RaceResultRepository';
 
-const router = express.Router();
+const router = Router();
 
 class TrainingPlanController {
     constructor(trainingPlanRepository, userRepository, workoutRepository, raceResultRepository) {
@@ -66,4 +63,4 @@ const trainingPlanController = new TrainingPlanController(
 
 router.post('/training-plan', (req, res) => trainingPlanController.createTrainingPlan(req, res));
 
-module.exports = router;
+export default router;

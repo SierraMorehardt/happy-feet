@@ -12,7 +12,7 @@ docker-compose up --build
 ### Local Development
 ```bash
 git clone <repo-url>
-cd happy-feet-js
+cd happy-feet
 npm install
 cp .env.example .env
 npm run dev
