@@ -13,19 +13,27 @@ services:
       - db_data:/var/lib/postgresql/data
 
   app:
-    build: .
+    build:
+      context: .
+      # Force rebuild of bcrypt in development
+      args:
+        - NODE_ENV=development
     volumes:
-      - ./src:/app/src  # Mount source code for live development
+      - .:/usr/src/app
+      # Don't mount node_modules to avoid permission issues
+      - /usr/src/app/node_modules
     depends_on:
       - db
     environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/happyfeet
-      SPRING_DATASOURCE_USERNAME: sierra.morehardt
-      SPRING_DATASOURCE_PASSWORD: Test123!
+      NODE_ENV: development
+      DATABASE_URL: postgresql://sierra.morehardt:Test123!@db:5432/happyfeet
+      PORT: 8080
     ports:
       - "8080:8080"
-    # Uncomment the following if you want to wait for db to be ready (optional)
-    # entrypoint: ["/bin/sh", "-c", "./wait-for-it.sh db:5432 -- java -jar /app.jar"]
+    # Uncomment the following if you want to wait for db to be ready
+    # command: ["./wait-for-it.sh", "db:5432", "--", "npm", "run", "dev"]
+    # Use nodemon for development
+    command: sh -c "npm rebuild bcrypt --build-from-source && npm run dev"
 
 volumes:
   db_data:

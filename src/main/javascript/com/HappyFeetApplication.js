@@ -313,8 +313,29 @@ app.put('/api/admin/users/:email/role', authenticate, async (req, res) => {
     }
 });
 
+// Root route
+app.get('/', (req, res) => {
+    res.status(200).json({
+        message: 'Welcome to Happy Feet API',
+        documentation: {
+            endpoints: [
+                'POST /api/register - Register a new user',
+                'POST /api/login - User login',
+                'GET /api/user - Get current user profile',
+                'PUT /api/user - Update user profile',
+                'GET /api/user/activity - Get user activity',
+                'POST /api/workouts - Log a workout',
+                'GET /api/workouts - Get user workouts',
+                'GET /api/workouts/:id - Get workout by ID'
+            ]
+        },
+        status: 'running',
+        timestamp: new Date().toISOString()
+    });
+});
+
 // Error handling middleware
-app.use((err, req, res) => {
+app.use((err, req, res, next) => {
     console.error(err.stack);
     res.status(500).json({ error: 'Something went wrong!' });
 });

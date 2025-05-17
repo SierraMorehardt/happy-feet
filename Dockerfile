@@ -1,22 +1,34 @@
-# Use Maven to build the application
-FROM eclipse-temurin:17-jdk-ubi9-minimal AS build
+# Use the official Node.js LTS image
+FROM node:18
 
-# Install Maven
-RUN microdnf install -y maven
+# Install build dependencies
+RUN apt-get update && apt-get install -y \
+    python3 \
+    make \
+    g++ \
+    && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /app
-COPY pom.xml .
-COPY src ./src
-WORKDIR /app
-COPY pom.xml .
-COPY src ./src
-RUN mvn clean package -DskipTests
+# Set working directory
+WORKDIR /usr/src/app
 
-# Use a lightweight JRE for running the application
-FROM eclipse-temurin:17-jre-ubi9-minimal
-WORKDIR /app
-COPY --from=build /app/target/*.jar app.jar
-# Expose the default Spring Boot port
+# Copy package files first for better layer caching
+COPY package*.json ./
+
+# Rebuild bcrypt for the container's architecture
+RUN npm uninstall bcrypt && \
+    npm install bcrypt --build-from-source
+
+# Install other dependencies
+RUN npm install
+
+# Copy application code
+COPY . .
+
+# Expose the application port
 EXPOSE 8080
+
+# Set environment variables
+ENV NODE_ENV=development
+
 # Run the application
-ENTRYPOINT ["java","-jar","app.jar"]
+CMD ["npm", "run", "dev"]
