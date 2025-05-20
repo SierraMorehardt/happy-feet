@@ -6,7 +6,20 @@ import 'dotenv/config';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { logger } from './utils/logger.js';
-import { userRouter } from './controller/UserController.js';
+
+// Import repositories
+import { 
+    UserRepository, 
+    TrainingPlanRepository, 
+    WorkoutRepository, 
+    RaceResultRepository 
+} from './repository/index.js';
+
+// Import services
+import { UserService, TrainingPlanService } from './service/index.js';
+
+// Import controllers
+import { UserController, TrainingPlanController } from './controller/index.js';
 
 class HappyFeetApplication {
     constructor() {
@@ -14,10 +27,37 @@ class HappyFeetApplication {
         this.port = process.env.PORT || 8080;
         this.env = process.env.NODE_ENV || 'development';
         
+        // Initialize repositories, services, and controllers
+        this.initializeDependencies();
+        
         this.initializeConfig();
         this.initializeMiddlewares();
         this.initializeRoutes();
         this.initializeErrorHandling();
+    }
+    
+    /**
+     * Initialize all dependencies (repositories, services, controllers)
+     */
+    initializeDependencies() {
+        // Initialize repositories
+        this.userRepository = new UserRepository();
+        this.trainingPlanRepository = new TrainingPlanRepository();
+        this.workoutRepository = new WorkoutRepository();
+        this.raceResultRepository = new RaceResultRepository();
+        
+        // Initialize services
+        this.userService = new UserService(this.userRepository);
+        this.trainingPlanService = new TrainingPlanService(
+            this.trainingPlanRepository,
+            this.userRepository,
+            this.workoutRepository,
+            this.raceResultRepository
+        );
+        
+        // Initialize controllers
+        this.userController = new UserController(this.userService);
+        this.trainingPlanController = new TrainingPlanController(this.trainingPlanService);
     }
 
     initializeConfig() {
@@ -81,24 +121,25 @@ class HappyFeetApplication {
     }
     
     initializeRoutes() {
+        // API routes
+        this.app.use('/api/users', this.userController.router);
+        this.app.use('/api/training-plans', this.trainingPlanController.router);
+        
         // Health check endpoint
         this.app.get('/health', (req, res) => {
-            res.status(200).json({
-                status: 'ok',
+            res.json({ 
+                status: 'ok', 
                 timestamp: new Date().toISOString(),
                 environment: this.env
             });
         });
         
-        // API routes
-        this.app.use('/api/users', userRouter);
-        
         // 404 handler
         this.app.use((req, res) => {
-            res.status(404).json({
-                status: 'error',
-                message: 'Not Found',
-                path: req.originalUrl
+            res.status(404).json({ 
+                error: 'Not Found',
+                path: req.path,
+                method: req.method
             });
         });
     }

@@ -1,22 +1,54 @@
-class UserRepository {
+import { BaseRepository } from './BaseRepository.js';
+import { User } from '../model/User.js';
+
+/**
+ * Repository for User model
+ */
+export class UserRepository extends BaseRepository {
     constructor() {
-        this.users = [];
+        super(User);
     }
 
-    save(user) {
-        this.users.push(user);
-        return user;
+    /**
+     * Find user by email
+     * @param {string} email - User's email
+     * @returns {Promise<Object|null>} User or null if not found
+     */
+    async findByEmail(email) {
+        return this.model.findOne({ email });
     }
 
-    findById(id) {
-        return this.users.find(user => user.id === id) || null;
+    /**
+     * Check if email is already in use
+     * @param {string} email - Email to check
+     * @returns {Promise<boolean>} True if email is in use
+     */
+    async isEmailInUse(email) {
+        const count = await this.model.countDocuments({ email });
+        return count > 0;
     }
 
-    findByEmail(email) {
-        return this.users.find(user => user.email === email) || null;
+    /**
+     * Update user's password
+     * @param {string} userId - User ID
+     * @param {string} newPassword - New password (will be hashed by the model)
+     * @returns {Promise<Object|null>} Updated user or null if not found
+     */
+    async updatePassword(userId, newPassword) {
+        return this.model.findByIdAndUpdate(
+            userId,
+            { password: newPassword },
+            { new: true }
+        );
     }
 
-    // Add other methods as needed (e.g., delete, findAll)
+    /**
+     * Find users by role
+     * @param {string} role - User role
+     * @param {Object} options - Query options
+     * @returns {Promise<Array>} List of users with the specified role
+     */
+    async findByRole(role, options = {}) {
+        return this.model.find({ role }, null, options);
+    }
 }
-
-module.exports = { UserRepository };
