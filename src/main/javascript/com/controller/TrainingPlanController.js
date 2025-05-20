@@ -1,66 +1,127 @@
 import { Router } from 'express';
-import { TrainingPlanRequest } from '../dto/TrainingPlanRequest';
-import { TrainingPlanRepository } from '../repository/TrainingPlanRepository';
-import { UserRepository } from '../repository/UserRepository';
-import { WorkoutRepository } from '../repository/WorkoutRepository';
-import { RaceResultRepository } from '../repository/RaceResultRepository';
+import jwt from 'jsonwebtoken';
+import { TrainingPlanService } from '../service/TrainingPlanService.js';
+import { logger } from '../utils/logger.js';
 
-const router = Router();
+export class TrainingPlanController {
+    /**
+     * Create a new TrainingPlanController
+     * @param {TrainingPlanService} trainingPlanService - The training plan service instance
+     */
+    constructor(trainingPlanService) {
+        if (!trainingPlanService) {
+            throw new Error('TrainingPlanService instance is required');
+        }
+        this.trainingPlanService = trainingPlanService;
+        this.router = Router();
+        this.initializeRoutes();
+    }
 
-class TrainingPlanController {
-    constructor(trainingPlanRepository, userRepository, workoutRepository, raceResultRepository) {
-        this.trainingPlanRepository = trainingPlanRepository;
-        this.userRepository = userRepository;
-        this.workoutRepository = workoutRepository;
-        this.raceResultRepository = raceResultRepository;
+    initializeRoutes() {
+        this.router.post('/', this.authenticateToken, this.createTrainingPlan.bind(this));
+        this.router.get('/', this.authenticateToken, this.getUserTrainingPlans.bind(this));
+        this.router.get('/:id', this.authenticateToken, this.getTrainingPlan.bind(this));
+        this.router.put('/:id', this.authenticateToken, this.updateTrainingPlan.bind(this));
+        this.router.delete('/:id', this.authenticateToken, this.deleteTrainingPlan.bind(this));
+    }
+
+    // Middleware to authenticate JWT token (duplicated from UserController - consider moving to a separate middleware)
+    authenticateToken(req, res, next) {
+        const authHeader = req.headers['authorization'];
+        const token = authHeader && authHeader.split(' ')[1];
+        
+        if (!token) {
+            return res.status(401).json({ error: 'Access token is required' });
+        }
+
+        jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
+            if (err) {
+                return res.status(403).json({ error: 'Invalid or expired token' });
+            }
+            req.user = user;
+            next();
+        });
     }
 
     async createTrainingPlan(req, res) {
-        const request = new TrainingPlanRequest(req.body);
-        const userOpt = await this.userRepository.findById(request.userId);
-        if (!userOpt) {
-            return res.status(400).send('User not found');
+        try {
+            const trainingPlan = await this.trainingPlanService.createTrainingPlan(
+                req.body,
+                req.user.userId
+            );
+            res.status(201).json(trainingPlan);
+        } catch (error) {
+            logger.error(`Create training plan error: ${error.message}`);
+            res.status(400).json({ error: error.message });
         }
+    }
 
-        const raceResults = await this.raceResultRepository.findByUserOrderByDateDesc(userOpt);
-        let bestResult = null;
-        let bestPace = Infinity;
-        for (const rr of raceResults) {
-            if (rr.distance > 0 && rr.time > 0) {
-                const pace = rr.time / rr.distance; // min/km
-                if (pace < bestPace) {
-                    bestPace = pace;
-                    bestResult = rr;
-                }
+    async getUserTrainingPlans(req, res) {
+        try {
+            const { status } = req.query;
+            const options = status ? { status } : {};
+            
+            const trainingPlans = await this.trainingPlanService.getUserTrainingPlans(
+                req.user.userId,
+                options
+            );
+            res.json(trainingPlans);
+        } catch (error) {
+            logger.error(`Get user training plans error: ${error.message}`);
+            res.status(500).json({ error: 'Failed to fetch training plans' });
+        }
+    }
+
+    async getTrainingPlan(req, res) {
+        try {
+            const trainingPlan = await this.trainingPlanService.getTrainingPlan(
+                req.params.id,
+                req.user.userId
+            );
+            
+            if (!trainingPlan) {
+                return res.status(404).json({ error: 'Training plan not found' });
             }
+            
+            res.json(trainingPlan);
+        } catch (error) {
+            logger.error(`Get training plan error: ${error.message}`);
+            res.status(500).json({ error: 'Failed to fetch training plan' });
         }
+    }
 
-        // Use bestResult to suggest paces/intensities
-        let easyPace = 'Easy';
-        let tempoPace = 'Moderate';
-        let longRunPace = 'Hard';
-        if (bestResult) {
-            const easy = bestPace * 1.25; // 25% slower
-            const tempo = bestPace * 1.10; // 10% slower
-            const longRun = bestPace * 1.20; // 20% slower
-            easyPace = `${easy.toFixed(1)} min/km`;
-            tempoPace = `${tempo.toFixed(1)} min/km`;
-            longRunPace = `${longRun.toFixed(1)} min/km`;
+    async updateTrainingPlan(req, res) {
+        try {
+            const updatedPlan = await this.trainingPlanService.updateTrainingPlan(
+                req.params.id,
+                req.body,
+                req.user.userId
+            );
+            res.json(updatedPlan);
+        } catch (error) {
+            logger.error(`Update training plan error: ${error.message}`);
+            const statusCode = error.message.includes('not found') ? 404 : 400;
+            res.status(statusCode).json({ error: error.message });
         }
+    }
 
-        // Further logic for creating the training plan would go here
-        // Respond with the created training plan or other relevant data
-        res.status(201).send({ easyPace, tempoPace, longRunPace });
+    async deleteTrainingPlan(req, res) {
+        try {
+            const success = await this.trainingPlanService.deleteTrainingPlan(
+                req.params.id,
+                req.user.userId
+            );
+            
+            if (!success) {
+                return res.status(404).json({ error: 'Training plan not found' });
+            }
+            
+            res.status(204).send();
+        } catch (error) {
+            logger.error(`Delete training plan error: ${error.message}`);
+            res.status(500).json({ error: 'Failed to delete training plan' });
+        }
     }
 }
 
-const trainingPlanController = new TrainingPlanController(
-    new TrainingPlanRepository(),
-    new UserRepository(),
-    new WorkoutRepository(),
-    new RaceResultRepository()
-);
-
-router.post('/training-plan', (req, res) => trainingPlanController.createTrainingPlan(req, res));
-
-export default router;
+// No default export - TrainingPlanController should be instantiated with dependencies

@@ -4,73 +4,58 @@ import express from 'express';
 import cors from 'cors';
 import rateLimit from 'express-rate-limit';
 import { validationResult, body } from 'express-validator';
+import { UserService } from '../../main/javascript/com/service/UserService.js';
 
 // Set up mocks before importing the controller
 jest.mock('bcrypt', () => ({
   ...jest.requireActual('bcrypt'),
-  compare: jest.fn().mockImplementation((password, hash) => {
-    console.log(`Mock bcrypt.compare called with:`, { password, hash });
-    return Promise.resolve(true);
-  }),
+  compare: jest.fn().mockResolvedValue(true),
   hash: jest.fn().mockResolvedValue('hashed-password')
 }));
 
+// Mock JWT
+const mockJwtSign = jest.fn().mockReturnValue('mocked-jwt-token');
 jest.mock('jsonwebtoken', () => ({
-  sign: jest.fn().mockImplementation((payload, secret, options) => {
-    console.log('JWT sign called with:', { payload, secret, options });
-    return 'mocked-jwt-token';
-  })
+  ...jest.requireActual('jsonwebtoken'),
+  sign: mockJwtSign
 }));
 
 // Import JWT and other modules after setting up the mocks
 import jwt from 'jsonwebtoken';
 import bcrypt from 'bcrypt';
-import { User } from '../../main/javascript/com/model/User.js';
 
-// Mock the User model
-jest.mock('../../main/javascript/com/model/User.js', () => {
-  return {
-    User: {
-      create: jest.fn().mockImplementation((data) => ({
-        ...data,
-        id: '123',
-        save: jest.fn().mockResolvedValue({
-          ...data,
-          id: '123',
-          toJSON: () => {
-            const { passwordHash, ...rest } = data;
-            return rest;
-          }
-        })
-      }))
-    }
-  };
-});
-
-// Mock the user repository
-const mockUserRepository = {
-  findByEmail: jest.fn(),
-  save: jest.fn().mockImplementation(user => Promise.resolve({
-    ...user,
-    id: '123',
-    toJSON: () => {
-      const { passwordHash, ...rest } = user;
-      return rest;
-    }
-  })),
-};
-
-// Import the actual UserController after mocks are set up
-import { UserController } from '../../main/javascript/com/controller/UserController.js';
+// Create a mock UserService class that extends the real one
+class MockUserService extends UserService {
+  constructor() {
+    const mockRepository = {
+      findByEmail: jest.fn(),
+      create: jest.fn(),
+      findById: jest.fn(),
+      update: jest.fn()
+    };
+    super(mockRepository);
+    
+    // Setup default mock implementations
+    this.register = jest.fn();
+    this.login = jest.fn();
+    this.getProfile = jest.fn();
+    this.updateProfile = jest.fn();
+  }
+}
 
 // Mock environment variables
 process.env.PORT = 8080;
 process.env.JWT_SECRET = 'test-secret-key';
 process.env.NODE_ENV = 'test';
 
+// Import the controller after setting up mocks
+import { UserController } from '../../main/javascript/com/controller/UserController.js';
+
+// Test suite
 describe('UserController Integration Tests', () => {
     let app;
     let userController;
+    let mockUserService;
     
     beforeEach(() => {
         // Reset all mocks before each test
@@ -88,153 +73,179 @@ describe('UserController Integration Tests', () => {
             max: 100
         }));
 
-        // Create a mock bcrypt instance
-        const mockBcrypt = {
-            compare: jest.fn().mockResolvedValue(true),
-            hash: jest.fn().mockResolvedValue('hashed-password')
-        };
+        // Create a mock UserService instance
+        mockUserService = new MockUserService();
         
+        // Setup default mock implementations
+        mockUserService.register.mockImplementation((userData) => {
+            return Promise.resolve({
+                id: '123',
+                email: userData.email,
+                firstName: userData.firstName,
+                lastName: userData.lastName,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            });
+        });
+        
+        mockUserService.login.mockImplementation((email, password) => {
+            return Promise.resolve({
+                user: {
+                    id: '123',
+                    email: email,
+                    firstName: 'Test',
+                    lastName: 'User'
+                },
+                token: 'mocked-jwt-token'
+            });
+        });
+        
+        mockUserService.getProfile.mockResolvedValue({
+            id: '123',
+            email: 'test@example.com',
+            firstName: 'Test',
+            lastName: 'User'
+        });
+        
+        mockUserService.updateProfile.mockImplementation((userId, updates) => {
+            return Promise.resolve({
+                id: userId,
+                email: updates.email || 'test@example.com',
+                firstName: updates.firstName || 'Test',
+                lastName: updates.lastName || 'User'
+            });
+        });
+
         // Mock JWT sign function
-        const mockJwt = {
-            sign: jest.fn().mockReturnValue('mocked-jwt-token')
-        };
-        
-        // Initialize UserController with mock repository and bcrypt
-        userController = new UserController(mockUserRepository, mockBcrypt);
-        
-        // Mock the JWT sign function
         jest.mock('jsonwebtoken', () => ({
             ...jest.requireActual('jsonwebtoken'),
-            sign: mockJwt.sign
+            sign: jest.fn().mockReturnValue('mocked-jwt-token')
         }));
         
-        // Set up routes
-        app.post('/api/register', (req, res) => userController.registerUser(req, res));
-        app.post('/api/login', (req, res) => userController.login(req, res));
+        // Initialize UserController with mock UserService
+        userController = new UserController(mockUserService);
+        
+        // Set up routes using the router from the controller
+        app.use('/api', userController.router);
     });
 
     describe('POST /api/register', () => {
         it('should register a new user', async () => {
             const mockUser = {
                 id: '123',
-                name: 'Test User',
+                firstName: 'Test',
+                lastName: 'User',
                 email: 'test@example.com',
-                username: 'testuser'
+                createdAt: new Date(),
+                updatedAt: new Date()
             };
             
-            // Mock the repository responses
-            mockUserRepository.findByEmail.mockResolvedValue(null);
-            mockUserRepository.save.mockResolvedValue(mockUser);
-
+            // Reset and setup the mock
+            mockUserService.register.mockReset();
+            mockUserService.register.mockResolvedValue(mockUser);
+            
             const response = await request(app)
                 .post('/api/register')
                 .send({
-                    name: 'Test User',
+                    firstName: 'Test',
+                    lastName: 'User',
                     email: 'test@example.com',
-                    username: 'testuser',
-                    password: 'password123',
-                    age: 25,
-                    gender: 'male',
-                    currentWeeklyMileage: 10,
-                    longestRecentRun: 5
+                    password: 'password123'
                 });
-
+                
             expect(response.status).toBe(201);
-            expect(response.body).toHaveProperty('id');
-            expect(response.body).toHaveProperty('name', 'Test User');
-            expect(response.body).toHaveProperty('email', 'test@example.com');
-            expect(response.body).not.toHaveProperty('password');
-            expect(mockUserRepository.save).toHaveBeenCalled();
+            expect(response.body).toHaveProperty('user');
+            expect(response.body.user).toHaveProperty('id', '123');
+            expect(response.body.user.email).toBe('test@example.com');
+            expect(response.body.user.firstName).toBe('Test');
+            expect(response.body.user.lastName).toBe('User');
+            expect(response.body).toHaveProperty('token');
+            expect(response.body.user).toHaveProperty('firstName', 'Test');
+            expect(response.body.user).toHaveProperty('lastName', 'User');
+            expect(response.body.user).not.toHaveProperty('password');
+            expect(mockUserService.register).toHaveBeenCalledWith({
+                firstName: 'Test',
+                lastName: 'User',
+                email: 'test@example.com',
+                password: 'password123'
+            });
         });
 
         it('should return 409 if email already exists', async () => {
-            const existingUser = {
-                id: '123',
-                name: 'Existing User',
-                email: 'existing@example.com',
-                username: 'existinguser'
-            };
-
-            mockUserRepository.findByEmail.mockResolvedValue(existingUser);
-
+            // Mock the UserService to throw a conflict error
+            mockUserService.register.mockRejectedValueOnce({
+                statusCode: 409,
+                message: 'Email already in use'
+            });
+            
             const response = await request(app)
                 .post('/api/register')
                 .send({
-                    name: 'New User',
+                    firstName: 'Test',
+                    lastName: 'User',
                     email: 'existing@example.com',
-                    username: 'newuser',
                     password: 'password123'
                 });
-
+                
             expect(response.status).toBe(409);
             expect(response.body).toHaveProperty('error', 'Email already in use');
-            expect(mockUserRepository.save).not.toHaveBeenCalled();
+            expect(mockUserService.register).toHaveBeenCalledWith({
+                firstName: 'Test',
+                lastName: 'User',
+                email: 'existing@example.com',
+                password: 'password123'
+            });
         });
     });
 
     describe('POST /api/login', () => {
         it('should login with valid credentials', async () => {
-            // Enable debug logging for tests
-            process.env.DEBUG = 'happy-feet:*';
-            
-            const mockUser = {
-                id: '123',
-                name: 'Test User',
-                email: 'test@example.com',
-                username: 'testuser',
-                passwordHash: 'hashed-password',
-                toJSON: function() {
-                    const { passwordHash, ...rest } = this;
-                    return rest;
-                }
-            };
-
-            // Mock the repository to return our user
-            mockUserRepository.findByEmail.mockResolvedValue(mockUser);
-            
-            // Mock bcrypt compare to return true for the test
-            jest.spyOn(bcrypt, 'compare').mockImplementation((password, hash) => {
-                console.log(`Comparing password: ${password}, hash: ${hash}`);
-                // Always return true for the test
-                return Promise.resolve(true);
+            // Mock the UserService login method
+            mockUserService.login.mockReset();
+            mockUserService.login.mockResolvedValue({
+                user: {
+                    id: '123',
+                    email: 'test@example.com',
+                    firstName: 'Test',
+                    lastName: 'User'
+                },
+                token: 'mocked-jwt-token'
             });
-
-            // Create a spy on jwt.sign
-            const jwtSignSpy = jest.spyOn(jwt, 'sign');
             
-            console.log('Sending login request...');
             const response = await request(app)
                 .post('/api/login')
                 .send({
                     email: 'test@example.com',
                     password: 'password123'
                 });
-
-            console.log('Response status:', response.status);
-            console.log('Response body:', JSON.stringify(response.body, null, 2));
-
+                
             expect(response.status).toBe(200);
-            expect(response.body).toHaveProperty('token');
             expect(response.body).toHaveProperty('user');
-            expect(response.body.user).not.toHaveProperty('passwordHash');
-            expect(jwtSignSpy).toHaveBeenCalled();
-            
-            // Clean up the spy
-            jwtSignSpy.mockRestore();
+            expect(response.body.user.email).toBe('test@example.com');
+            expect(response.body.user.firstName).toBe('Test');
+            expect(response.body.user.lastName).toBe('User');
+            expect(response.body).toHaveProperty('token');
+            expect(mockUserService.login).toHaveBeenCalledWith('test@example.com', 'password123');
         });
-
+        
         it('should return 401 with invalid credentials', async () => {
-            mockUserRepository.findByEmail.mockResolvedValue(null);
-
+            // Mock the UserService to throw an unauthorized error
+            mockUserService.login.mockReset();
+            mockUserService.login.mockRejectedValue({
+                statusCode: 401,
+                message: 'Invalid credentials'
+            });
+            
             const response = await request(app)
                 .post('/api/login')
                 .send({
                     email: 'nonexistent@example.com',
                     password: 'wrongpassword'
                 });
-
+                
             expect(response.status).toBe(401);
             expect(response.body).toHaveProperty('error', 'Invalid credentials');
+            expect(mockUserService.login).toHaveBeenCalledWith('nonexistent@example.com', 'wrongpassword');
         });
     });
 });
