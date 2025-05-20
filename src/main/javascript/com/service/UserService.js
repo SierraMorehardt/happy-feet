@@ -3,6 +3,12 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import { User } from '../model/User.js';
 import { logger } from '../utils/logger.js';
+import { 
+    BadRequestError, 
+    UnauthorizedError, 
+    ConflictError,
+    NotFoundError 
+} from '../errors/AppError.js';
 
 export class UserService extends BaseService {
     constructor(userRepository, bcryptLib = bcrypt, jwtLib = jwt) {
@@ -22,13 +28,13 @@ export class UserService extends BaseService {
 
         // Validate required fields
         if (!name || !email || !password) {
-            throw new Error('Name, email, and password are required');
+            throw new BadRequestError('Name, email, and password are required');
         }
 
         // Check if user already exists
         const existingUser = await this.repository.findByEmail(email);
         if (existingUser) {
-            throw new Error('Email already in use');
+            throw new ConflictError('Email already in use');
         }
 
         // Create user entity
@@ -58,12 +64,12 @@ export class UserService extends BaseService {
     async login(email, password) {
         const user = await this.repository.findByEmail(email);
         if (!user) {
-            throw new Error('Invalid credentials');
+            throw new UnauthorizedError('Invalid email or password');
         }
 
         const isValidPassword = await this.bcrypt.compare(password, user.passwordHash);
         if (!isValidPassword) {
-            throw new Error('Invalid credentials');
+            throw new UnauthorizedError('Invalid email or password');
         }
 
         // Generate JWT
@@ -87,7 +93,7 @@ export class UserService extends BaseService {
     async getProfile(userId) {
         const user = await this.repository.findById(userId);
         if (!user) {
-            throw new Error('User not found');
+            throw new NotFoundError('User not found');
         }
 
         // Return user data without password hash

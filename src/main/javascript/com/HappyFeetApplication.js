@@ -6,6 +6,7 @@ import 'dotenv/config';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { logger } from './utils/logger.js';
+import { errorHandler, notFoundHandler } from './middleware/errorHandler.js';
 
 // Import repositories
 import { 
@@ -133,34 +134,14 @@ class HappyFeetApplication {
                 environment: this.env
             });
         });
-        
-        // 404 handler
-        this.app.use((req, res) => {
-            res.status(404).json({ 
-                error: 'Not Found',
-                path: req.path,
-                method: req.method
-            });
-        });
     }
     
     initializeErrorHandling() {
-        // Global error handler
-        this.app.use((err, req, res, next) => {
-            logger.error(`[${new Date().toISOString()}] ${err.stack}`);
-            
-            const statusCode = err.statusCode || 500;
-            const response = {
-                status: 'error',
-                message: err.message || 'Internal Server Error'
-            };
-            
-            if (this.env === 'development') {
-                response.stack = err.stack;
-            }
-            
-            res.status(statusCode).json(response);
-        });
+        // 404 handler
+        this.app.use(notFoundHandler);
+        
+        // Global error handler - must be the last middleware
+        this.app.use(errorHandler);
     }
     
     start() {
