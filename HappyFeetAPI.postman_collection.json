@@ -8,6 +8,67 @@
   "item": [
     {
       "name": "Register User",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test(\"Status code is 201\", function() {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "// Store the test user's email for use in other tests",
+              "const response = pm.response.json();",
+              "if (response && response.user && response.user.email) {",
+              "    pm.environment.set('testUserEmail', response.user.email);",
+              "    pm.environment.set('testUserId', response.user.id);",
+              "    console.log('Test user created and environment set:', { ",
+              "        testUserEmail: pm.environment.get('testUserEmail'),",
+              "        testUserId: pm.environment.get('testUserId')",
+              "    });",
+              "} else {",
+              "    console.error('Failed to set test user environment variables:', response);",
+              "}",
+              "",
+              "pm.test(\"Response has the required fields\", function() {",
+              "    const response = pm.response.json();",
+              "    console.log('Full response:', JSON.stringify(response, null, 2));",
+              "    // Check if response has required top-level properties",
+              "    pm.expect(response, 'Response should be an object').to.be.an('object');",
+              "    pm.expect(response, 'Response should have user object').to.have.property('user').that.is.an('object');",
+              "    pm.expect(response, 'Response should have token').to.have.property('token').that.is.a('string');",
+              "    // Check user object",
+              "    const user = response.user;",
+              "    console.log('User object:', JSON.stringify(user, null, 2));",
+              "    // Verify required user properties",
+              "    const requiredProps = ['id', 'username', 'email', 'age', 'gender'];",
+              "    requiredProps.forEach(prop => {",
+              "        pm.expect(user, `User should have ${prop}`).to.have.property(prop);",
+              "    });",
+              "    // Check specific values",
+              "    pm.expect(user, 'Should have username').to.have.property('username').that.is.a('string');",
+              "    pm.expect(user, 'Username should start with testuser').to.have.property('username').that.matches(/^testuser/);",
+              "    pm.expect(user, 'Age should be 28').to.have.property('age', 28);",
+              "    pm.expect(user, 'Gender should be female').to.have.property('gender', 'female');",
+              "    // Check optional properties if they exist",
+              "    const optionalProps = ['currentWeeklyMileage', 'longestRecentRun'];",
+              "    optionalProps.forEach(prop => {",
+              "        if (user[prop] !== undefined) {",
+              "            pm.expect(user, `User ${prop} should be a number if present`).to.have.property(prop).that.is.a('number');",
+              "        }",
+              "    });",
+              "    // Store user ID for future requests",
+              "    // Store the user ID for future requests",
+              "    if (user && user.id) {",
+              "        pm.environment.set('userId', user.id);",
+              "        pm.collectionVariables.set('userId', user.id);",
+              "    }",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
       "request": {
         "method": "POST",
         "header": [
@@ -15,13 +76,84 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"username\": \"testuser\",\n  \"password\": \"password123\",\n  \"age\": 28,\n  \"gender\": \"F\",\n  \"currentWeeklyMileage\": 0.0,\n  \"longestRecentRun\": 13\n}"
+          "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"testuser-{{$timestamp}}@example.com\",\n  \"password\": \"password123\",\n  \"username\": \"testuser-{{$timestamp}}\",\n  \"age\": 28,\n  \"gender\": \"female\",\n  \"currentWeeklyMileage\": 0.0,\n  \"longestRecentRun\": 13\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
         },
-        "url": { "raw": "http://localhost:8080/api/register", "protocol": "http", "host": ["localhost"], "port": "8080", "path": ["api", "register"] }
+        "description": "Register a new test user with a unique email and username based on timestamp",
+        "url": { "raw": "http://localhost:8080/api/users/register", "protocol": "http", "host": ["localhost"], "port": "8080", "path": ["api", "users", "register"] }
       }
     },
     {
       "name": "Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Log the email being used for login",
+              "const requestData = JSON.parse(pm.request.body.raw);",
+              "const testUserEmail = pm.environment.get('testUserEmail');",
+              "console.log('Attempting login with email from request:', requestData.email);",
+              "console.log('Test user email from environment:', testUserEmail);",
+              "",
+              "// Check if we have a valid email to use",
+              "if (!testUserEmail && !requestData.email) {",
+              "    throw new Error('No email provided and no testUserEmail in environment');",
+              "}",
+              "",
+              "// Use the email from the request or fall back to the environment variable",
+              "const loginEmail = requestData.email || testUserEmail;",
+              "console.log('Using email for login:', loginEmail);",
+              "",
+              "pm.test(\"Status code is 200\", function() {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response has token and user data\", function() {",
+              "    const responseData = pm.response.json();",
+              "    console.log('Login response:', JSON.stringify(responseData, null, 2));",
+              "",
+              "    if (!responseData.token) {",
+              "        console.error('No token in response:', responseData);",
+              "        throw new Error('No token received in login response');",
+              "    }",
+              "",
+              "    pm.expect(responseData, 'Response should have token').to.have.property('token').that.is.a('string');",
+              "    pm.expect(responseData, 'Response should have user object').to.have.property('user').that.is.an('object');",
+              "",
+              "    // Store the token for authenticated requests",
+              "    pm.environment.set('authToken', responseData.token);",
+              "    console.log('Auth token set in environment');",
+              "",
+              "    // Log the token for debugging (first and last 5 chars only)",
+              "    const token = responseData.token;",
+              "    const tokenPreview = token.length > 10 ?",
+              "        `${token.substring(0, 5)}...${token.substring(token.length - 5)}` :",
+              "        token;",
+              "    console.log('Token received:', tokenPreview);",
+              "",
+              "    // Verify the token is a valid JWT",
+              "    const tokenParts = token.split('.');",
+              "    if (tokenParts.length !== 3) {",
+              "        console.error('Invalid JWT format:', tokenPreview);",
+              "        throw new Error('Invalid JWT format');",
+              "    }",
+              "    // Set the token in the environment",
+              "    pm.environment.set('authToken', token);",
+              "    // Also set it in the collection variables as a fallback",
+              "    pm.collectionVariables.set('authToken', token);",
+              "    // Log the environment update",
+              "    console.log('Token saved to environment. Environment keys:', Object.keys(pm.environment.toObject()));",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
       "request": {
         "method": "POST",
         "header": [
@@ -29,19 +161,170 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\n  \"username\": \"testuser\",\n  \"password\": \"password123\"\n}"
+          "raw": "{\n  \"email\": \"{{testUserEmail}}\",\n  \"password\": \"password123\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          },
+          "description": "Login with the registered test user's email and password"
         },
-        "url": { "raw": "http://localhost:8080/api/login", "protocol": "http", "host": ["localhost"], "port": "8080", "path": ["api", "login"] }
+        "url": { "raw": "http://localhost:8080/api/users/login", "protocol": "http", "host": ["localhost"], "port": "8080", "path": ["api", "users", "login"] }
       }
     },
     {
       "name": "Get User by Username",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "exec": [
+              "// Debug: Log all environment variables",
+              "console.log('Environment variables:', pm.environment.toObject());",
+              "// Try to get token from environment or collection variables",
+              "const token = pm.environment.get('authToken') || pm.collectionVariables.get('authToken');",
+              "if (!token) {",
+              "    console.error('No authToken found in environment or collection variables');",
+              "    // Try to get from response of login request",
+              "    const loginResponse = pm.response ? pm.response.json() : null;",
+              "    if (loginResponse && loginResponse.token) {",
+              "        console.log('Found token in login response, setting in environment');",
+              "        pm.environment.set('authToken', loginResponse.token);",
+              "    } else {",
+              "        console.error('No token found in login response');",
+              "    }",
+              "} else {",
+              "    console.log('Using token from environment/collection:', token.substring(0, 5) + '...');",
+              "}"
+            ],
+            "type": "text/javascript"
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "// Log test environment",
+              "console.log('Test environment:', {",
+              "    testUserId: pm.environment.get('testUserId'),",
+              "    testUserEmail: pm.environment.get('testUserEmail'),",
+              "    hasAuthToken: !!pm.environment.get('authToken')",
+              "});",
+              "",
+              "// Check if we have a valid user ID",
+              "const testUserId = pm.environment.get('testUserId');",
+              "if (!testUserId) {",
+              "    throw new Error('No testUserId found in environment. Run the registration test first.');",
+              "}",
+              "",
+              "// Log request details for debugging",
+              "console.log('Request URL:', pm.request.url.toString());",
+              "console.log('Request method:', pm.request.method);",
+              "console.log('Request headers:', JSON.stringify(pm.request.headers.toObject(), null, 2));",
+              "",
+              "// Verify the Authorization header is set",
+              "const authHeader = pm.request.headers.get('Authorization');",
+              "if (!authHeader || !authHeader.startsWith('Bearer ')) {",
+              "    console.error('No valid Authorization header found in request');",
+              "    throw new Error('Missing or invalid Authorization header');",
+              "}",
+              "",
+              "const token = authHeader.split(' ')[1];",
+              "console.log('Using token:', token.length > 10 ?",
+              "    `${token.substring(0, 5)}...${token.substring(token.length - 5)}` : token);",
+              "",
+              "pm.test(\"Status code is 200\", function() {",
+              "    if (pm.response.code !== 200) {",
+              "        console.error('Unexpected status code:', pm.response.status, pm.response.statusText);",
+              "        console.error('Response body:', pm.response.text());",
+              "    }",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "pm.test(\"Response has user data\", function() {",
+              "    // Check if we have a valid response",
+              "    if (pm.response.code !== 200) {",
+              "        console.error('Skipping response validation due to non-200 status code');",
+              "        return;",
+              "    }",
+              "",
+              "    let response;",
+              "    try {",
+              "        response = pm.response.json();",
+              "        console.log('Profile response status:', pm.response.code);",
+              "        console.log('Profile response body:', JSON.stringify(response, null, 2));",
+              "    } catch (e) {",
+              "        console.error('Failed to parse response as JSON:', pm.response.text());",
+              "        throw new Error('Invalid JSON response');",
+              "    }",
+              "",
+              "    // The response might be the user object directly or nested under a 'user' property",
+              "    const user = response.user || response;",
+              "",
+              "    // Verify required user properties",
+              "    const requiredProps = ['id', 'username', 'email', 'age', 'gender'];",
+              "    requiredProps.forEach(prop => {",
+              "        if (!user.hasOwnProperty(prop)) {",
+              "            console.error(`Missing required property: ${prop}`, user);",
+              "        }",
+              "        pm.expect(user, `User should have ${prop}`).to.have.property(prop);",
+              "    });",
+              "",
+              "    // Verify the user ID matches the expected test user",
+              "    if (user.id) {",
+              "        pm.expect(user, 'User ID should match test user').to.have.property('id', testUserId);",
+              "    } else {",
+              "        console.error('User ID not found in response:', user);",
+              "        pm.expect.fail('User ID not found in response');",
+              "    }",
+              "",
+              "    // Check optional properties if they exist",
+              "    const optionalProps = ['currentWeeklyMileage', 'longestRecentRun'];",
+              "    optionalProps.forEach(prop => {",
+              "        if (user[prop] !== undefined) {",
+              "            pm.expect(user, `User ${prop} should be a number if present`)",
+              "                .to.have.property(prop)",
+              "                .that.is.a('number');",
+              "        }",
+              "    });",
+              "",
+              "    // Verify sensitive data is not exposed",
+              "    pm.expect(user, 'Password hash should not be exposed').to.not.have.property('passwordHash');",
+              "});"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
       "request": {
         "method": "GET",
         "header": [
-          { "key": "Accept", "value": "application/json" }
+          { 
+            "key": "Content-Type", 
+            "value": "application/json",
+            "description": "Request content type"
+          },
+          { 
+            "key": "Authorization", 
+            "value": "Bearer {{authToken}}",
+            "type": "text",
+            "description": "JWT token for authentication"
+          },
+          {
+            "key": "X-Debug-Token",
+            "value": "{{$guid}}",
+            "description": "Unique ID for request tracing"
+          }
         ],
-        "url": { "raw": "http://localhost:8080/api/users/testuser", "protocol": "http", "host": ["localhost"], "port": "8080", "path": ["api", "users", "testuser"] }
+        "url": { 
+          "raw": "http://localhost:8080/api/users/{{testUserId}}", 
+          "protocol": "http", 
+          "host": ["localhost"], 
+          "port": "8080", 
+          "path": ["api", "users", "{{testUserId}}"],
+          "query": []
+        },
+        "description": "Get user profile by ID using the test user ID from registration. Requires authentication."
       }
     }
   ]

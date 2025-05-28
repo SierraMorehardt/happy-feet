@@ -110,11 +110,25 @@ export class User {
     // Static factory method
     static create(data) {
         const user = new User();
-        Object.keys(data).forEach(key => {
-            if (key in user) {
-                user[key] = data[key];
-            }
-        });
+        
+        // Set properties using setters for validation
+        if (data.id !== undefined) user.id = data.id;
+        if (data.name !== undefined) user.name = data.name;
+        if (data.email !== undefined) user.email = data.email;
+        if (data.username !== undefined) user.username = data.username;
+        if (data.age !== undefined) user.age = data.age;
+        if (data.gender !== undefined) user.gender = data.gender;
+        if (data.currentWeeklyMileage !== undefined) user.currentWeeklyMileage = data.currentWeeklyMileage;
+        if (data.longestRecentRun !== undefined) user.longestRecentRun = data.longestRecentRun;
+        
+        // Special handling for password hash
+        if (data.passwordHash !== undefined) {
+            user.passwordHash = data.passwordHash;
+        } else if (data.password !== undefined) {
+            // If plain password is provided, it should be hashed by the service
+            throw new Error('Password must be hashed before creating user');
+        }
+        
         return user;
     }
 

@@ -1,38 +1,45 @@
+// In-memory storage for all repositories
+const storage = new Map();
+
 /**
- * Base repository class providing common database operations
+ * Base repository class providing common operations
  */
 export class BaseRepository {
     constructor(model) {
         this.model = model;
+        this.collection = new Map();
+        storage.set(model.name, this.collection);
     }
 
     /**
      * Find all entities
-     * @param {Object} options - Query options
      * @returns {Promise<Array>} List of entities
      */
-    async findAll(options = {}) {
-        return this.model.find(options);
+    async findAll() {
+        return Array.from(this.collection.values());
     }
 
     /**
      * Find entity by ID
-     * @param {string|number} id - Entity ID
-     * @param {Object} options - Query options
+     * @param {string} id - Entity ID
      * @returns {Promise<Object|null>} Found entity or null
      */
-    async findById(id, options = {}) {
-        return this.model.findById(id, options);
+    async findById(id) {
+        return this.collection.get(id) || null;
     }
 
     /**
      * Find one entity by query
-     * @param {Object} query - Query object
-     * @param {Object} options - Query options
+     * @param {Function} predicate - Function to test each element
      * @returns {Promise<Object|null>} Found entity or null
      */
-    async findOne(query, options = {}) {
-        return this.model.findOne(query, options);
+    async findOne(predicate) {
+        for (const entity of this.collection.values()) {
+            if (predicate(entity)) {
+                return entity;
+            }
+        }
+        return null;
     }
 
     /**
@@ -42,12 +49,14 @@ export class BaseRepository {
      */
     async create(data) {
         const entity = new this.model(data);
-        return entity.save();
+        entity.id = Date.now().toString();
+        this.collection.set(entity.id, entity);
+        return entity;
     }
 
     /**
      * Update an existing entity
-     * @param {string|number} id - Entity ID
+     * @param {string} id - Entity ID
      * @param {Object} data - Update data
      * @param {Object} options - Update options
      * @returns {Promise<Object|null>} Updated entity or null if not found
