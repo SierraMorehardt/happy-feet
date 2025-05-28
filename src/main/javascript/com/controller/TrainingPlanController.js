@@ -1,6 +1,6 @@
 import { Router } from 'express';
-import jwt from 'jsonwebtoken';
 import { TrainingPlanService } from '../service/TrainingPlanService.js';
+import { authenticateToken } from '../middleware/authMiddleware.js';
 import { logger } from '../utils/logger.js';
 
 export class TrainingPlanController {
@@ -18,29 +18,20 @@ export class TrainingPlanController {
     }
 
     initializeRoutes() {
-        this.router.post('/', this.authenticateToken, this.createTrainingPlan.bind(this));
-        this.router.get('/', this.authenticateToken, this.getUserTrainingPlans.bind(this));
-        this.router.get('/:id', this.authenticateToken, this.getTrainingPlan.bind(this));
-        this.router.put('/:id', this.authenticateToken, this.updateTrainingPlan.bind(this));
-        this.router.delete('/:id', this.authenticateToken, this.deleteTrainingPlan.bind(this));
+        // Bind the middleware to the controller instance
+        const authMiddleware = this.authenticateToken.bind(this);
+        
+        this.router.post('/', authMiddleware, this.createTrainingPlan.bind(this));
+        this.router.get('/', authMiddleware, this.getUserTrainingPlans.bind(this));
+        this.router.get('/:id', authMiddleware, this.getTrainingPlan.bind(this));
+        this.router.put('/:id', authMiddleware, this.updateTrainingPlan.bind(this));
+        this.router.delete('/:id', authMiddleware, this.deleteTrainingPlan.bind(this));
     }
 
-    // Middleware to authenticate JWT token (duplicated from UserController - consider moving to a separate middleware)
-    authenticateToken(req, res, next) {
-        const authHeader = req.headers['authorization'];
-        const token = authHeader && authHeader.split(' ')[1];
-        
-        if (!token) {
-            return res.status(401).json({ error: 'Access token is required' });
-        }
-
-        jwt.verify(token, process.env.JWT_SECRET, (err, user) => {
-            if (err) {
-                return res.status(403).json({ error: 'Invalid or expired token' });
-            }
-            req.user = user;
-            next();
-        });
+    // Authentication middleware
+    authenticateToken = (req, res, next) => {
+        // Call the imported middleware function with the correct context
+        return authenticateToken(req, res, next);
     }
 
     async createTrainingPlan(req, res) {

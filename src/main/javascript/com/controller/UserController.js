@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import jwt from 'jsonwebtoken';
+import { authenticateToken } from '../middleware/authMiddleware.js';
 import { UserService } from '../service/UserService.js';
 import { logger } from '../utils/logger.js';
 
@@ -18,67 +18,23 @@ export class UserController {
     }
     
     initializeRoutes() {
+        // Bind the middleware to the controller instance
+        const authMiddleware = this.authenticateToken.bind(this);
+        
+        // Public routes
         this.router.post('/register', this.registerUser.bind(this));
         this.router.post('/login', this.login.bind(this));
-        this.router.get('/profile', this.authenticateToken.bind(this), this.getProfile.bind(this));
-        this.router.get('/:id', this.authenticateToken.bind(this), this.getUserById.bind(this));
-        this.router.put('/profile', this.authenticateToken.bind(this), this.updateProfile.bind(this));
+        
+        // Protected routes
+        this.router.get('/profile', authMiddleware, this.getProfile.bind(this));
+        this.router.get('/:id', authMiddleware, this.getUserById.bind(this));
+        this.router.put('/profile', authMiddleware, this.updateProfile.bind(this));
     }
 
-    // Middleware to authenticate JWT token
-    authenticateToken = async (req, res, next) => {
-        try {
-            // Get the token from the Authorization header
-            const authHeader = req.headers['authorization'];
-            if (!authHeader) {
-                logger.warn('No authorization header provided');
-                return res.status(401).json({ error: 'Access token is required' });
-            }
-
-            // Extract the token from the Bearer scheme
-            const token = authHeader.startsWith('Bearer ') ? authHeader.split(' ')[1] : authHeader;
-            if (!token) {
-                logger.warn('No token provided in authorization header');
-                return res.status(401).json({ error: 'Access token is required' });
-            }
-
-            logger.debug(`Verifying token: ${token.substring(0, 10)}...`);
-
-            // Verify the token synchronously
-            try {
-                const user = jwt.verify(token, process.env.JWT_SECRET);
-                logger.debug(`Token verified for user: ${user.email}`);
-                
-                // Attach the user to the request object
-                req.user = user;
-                return next();
-            } catch (err) {
-                logger.error(`Token verification failed: ${err.message}`, {
-                    name: err.name,
-                    expiredAt: err.expiredAt,
-                    currentTime: new Date().toISOString(),
-                    tokenStart: token.substring(0, 10)
-                });
-                
-                return res.status(403).json({ 
-                    error: 'Invalid or expired token',
-                    details: process.env.NODE_ENV === 'development' ? {
-                        message: err.message,
-                        name: err.name,
-                        expiredAt: err.expiredAt
-                    } : undefined
-                });
-            }
-        } catch (error) {
-            logger.error(`Unexpected error in token authentication: ${error.message}`, { 
-                error: error.message,
-                stack: error.stack 
-            });
-            return res.status(500).json({ 
-                error: 'Internal server error during authentication',
-                details: process.env.NODE_ENV === 'development' ? error.message : undefined
-            });
-        }
+    // Authentication middleware
+    authenticateToken = (req, res, next) => {
+        // Call the imported middleware function with the correct context
+        return authenticateToken(req, res, next);
     }
 
     async registerUser(req, res) {
